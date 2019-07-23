@@ -30,11 +30,8 @@ _UpgradeReport_Files/
 ###############
 # Directories #
 ###############
-database/
-wwwroot/workspaces/
 bin/
 obj/
-TestResults/
 ###################
 # Web publish log #
 ###################
@@ -48,6 +45,7 @@ TestResults/
 .c9/
 *.launch
 .settings/
+.vscode/
 *.sublime-workspace
 ############
 # Packages #
