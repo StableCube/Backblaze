@@ -20,7 +20,7 @@ namespace StableCube.Backblaze.DotNetClient
         )
         {
             _client = client;
-            _client.DefaultRequestHeaders.Add("Accept", "application/json");
+            _client.Timeout = TimeSpan.FromMinutes(20);
         }
 
         public async Task<Authorization> AuthorizeAsync(
@@ -266,6 +266,8 @@ namespace StableCube.Backblaze.DotNetClient
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
+            
+
             using (var fs = File.OpenRead(sourcePath))
             {
                 long totalFileSize = fs.Length;
@@ -312,7 +314,9 @@ namespace StableCube.Backblaze.DotNetClient
                         string resultJson = await result.Content.ReadAsStringAsync();
 
                         if(!result.IsSuccessStatusCode)
+                        {
                             ErrorHelper.ThrowException(resultJson);
+                        }
 
                         return JsonConvert.DeserializeObject<UploadedPart>(resultJson);
                     }
@@ -367,7 +371,7 @@ namespace StableCube.Backblaze.DotNetClient
         /// 
         /// Retries are attempted on recoverable errors
         /// </summary>
-        public async Task<FileData> UploadDynamic(
+        public async Task<FileData> UploadDynamicAsync(
             Authorization auth,
             string sourcePath,
             string bucketId,

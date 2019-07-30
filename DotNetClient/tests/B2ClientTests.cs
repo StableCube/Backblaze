@@ -118,7 +118,7 @@ namespace StableCube.Backblaze.DotNetClient.Tests
             var auth = await client.AuthorizeAsync(_keyId, _appKey);
 
             var path = "/home/zboyet/Documents/TestMedia/Videos/BigBuckBunny_640x360.m4v";
-            var fileData = await client.UploadDynamic(
+            var fileData = await client.UploadDynamicAsync(
                 auth: auth, 
                 sourcePath: path, 
                 bucketId: _bucketId, 
@@ -137,7 +137,7 @@ namespace StableCube.Backblaze.DotNetClient.Tests
             var auth = await client.AuthorizeAsync(_keyId, _appKey);
 
             var path = "/home/zboyet/Documents/TestMedia/Videos/V-Mpeg2_A-Mpeg2_Zelda.mpeg";
-            var fileData = await client.UploadDynamic(
+            var fileData = await client.UploadDynamicAsync(
                 auth: auth, 
                 sourcePath: path, 
                 bucketId: _bucketId, 
