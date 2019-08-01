@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Net.Http;
 using Xunit;
 
@@ -79,13 +80,21 @@ namespace StableCube.Backblaze.DotNetClient.Tests
             var http = new HttpClient();
             var client = new B2Client(http);
             var auth = await client.AuthorizeAsync(_keyId, _appKey);
-            var uploadInit = await client.StartLargeFileUploadAsync(auth, _bucketId, "test-large.m4v");
+            var destFilename = "test-large.m4v";
+            var uploadInit = await client.StartLargeFileUploadAsync(auth, _bucketId, destFilename);
             var uploadUrl = await client.GetUploadPartUrlAsync(auth, uploadInit);
 
             var path = "/home/zboyet/Documents/TestMedia/Videos/BigBuckBunny_640x360.m4v";
-            var upload = await client.UploadLargeFilePartAsync(uploadUrl, path, 1, auth.RecommendedPartSize);
+            var outTmp = "/tmp/poop.01";
+            FileSplitter.Extract(path, outTmp, auth.RecommendedPartSize, 21283919);
 
-            Assert.Equal(1, upload.PartNumber);
+            using(var stream = System.IO.File.OpenRead(outTmp))
+            {
+                var upload = await client.UploadLargeFilePartAsync(uploadUrl, stream, destFilename, 2);
+                File.Delete(outTmp);
+
+                Assert.Equal(2, upload.PartNumber);
+            }
         }
 
         [Fact]
@@ -94,56 +103,29 @@ namespace StableCube.Backblaze.DotNetClient.Tests
             var http = new HttpClient();
             var client = new B2Client(http);
             var auth = await client.AuthorizeAsync(_keyId, _appKey);
-            var uploadInit = await client.StartLargeFileUploadAsync(auth, _bucketId, "test-large.m4v");
+            var destFilename = "test-large.m4v";
+            var uploadInit = await client.StartLargeFileUploadAsync(auth, _bucketId, destFilename);
             var uploadUrl = await client.GetUploadPartUrlAsync(auth, uploadInit);
 
             var path = "/home/zboyet/Documents/TestMedia/Videos/BigBuckBunny_640x360.m4v";
-            var part1 = await client.UploadLargeFilePartAsync(uploadUrl, path, 1, auth.RecommendedPartSize);
-            var part2 = await client.UploadLargeFilePartAsync(uploadUrl, path, 2, auth.RecommendedPartSize);
-
+            var parts = FileSplitter.SplitAll(path, "/tmp", auth.RecommendedPartSize);
             string[] partHashes = new string[2];
-            partHashes[0] = part1.ContentSha1;
-            partHashes[1] = part2.ContentSha1;
+
+            using(var stream = System.IO.File.OpenRead(parts[0].filePath))
+            {
+                var part1 = await client.UploadLargeFilePartAsync(uploadUrl, stream, destFilename, 1);
+                partHashes[0] = part1.ContentSha1;
+                File.Delete(parts[0].filePath);
+            }
+
+            using(var stream = System.IO.File.OpenRead(parts[1].filePath))
+            {
+                var part2 = await client.UploadLargeFilePartAsync(uploadUrl, stream, destFilename, 2);
+                partHashes[1] = part2.ContentSha1;
+                File.Delete(parts[1].filePath);
+            }
 
             var fileData = await client.FinishLargeFileUploadAsync(auth, uploadInit.FileId, partHashes);
-
-            Assert.StartsWith("upload", fileData.Action);
-        }
-
-        [Fact]
-        public async void Should_Upload_Large_File_Dynamically()
-        {
-            var http = new HttpClient();
-            var client = new B2Client(http);
-            var auth = await client.AuthorizeAsync(_keyId, _appKey);
-
-            var path = "/home/zboyet/Documents/TestMedia/Videos/BigBuckBunny_640x360.m4v";
-            var fileData = await client.UploadDynamicAsync(
-                auth: auth, 
-                sourcePath: path, 
-                bucketId: _bucketId, 
-                destinationFilename: "test-dynamic-large.m4v",
-                retryTimeoutCount: 5
-            );
-
-            Assert.StartsWith("upload", fileData.Action);
-        }
-
-         [Fact]
-        public async void Should_Upload_Small_File_Dynamically()
-        {
-            var http = new HttpClient();
-            var client = new B2Client(http);
-            var auth = await client.AuthorizeAsync(_keyId, _appKey);
-
-            var path = "/home/zboyet/Documents/TestMedia/Videos/V-Mpeg2_A-Mpeg2_Zelda.mpeg";
-            var fileData = await client.UploadDynamicAsync(
-                auth: auth, 
-                sourcePath: path, 
-                bucketId: _bucketId, 
-                destinationFilename: "test-dynamic-small.mpeg",
-                retryTimeoutCount: 5
-            );
 
             Assert.StartsWith("upload", fileData.Action);
         }

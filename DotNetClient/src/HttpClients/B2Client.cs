@@ -7,13 +7,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Timers;
 using Newtonsoft.Json;
 
 namespace StableCube.Backblaze.DotNetClient
 {
     public class B2Client : IB2Client
     {
-        private HttpClient _client;
+        protected HttpClient _client;
 
         public B2Client(
             HttpClient client
@@ -86,15 +87,17 @@ namespace StableCube.Backblaze.DotNetClient
             UploadUrl uploadUrl, 
             string sourcePath, 
             string destinationFilename,
+            IProgress<FileProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
             using (var fs = File.OpenRead(sourcePath))
             {
-                byte[] fileData = await File.ReadAllBytesAsync(sourcePath);
-                string fileHash = GetFileHash(fileData);
+                string fileHash = GetFileHash(fs);
 
-                using (var fileContent = new ByteArrayContent(fileData))
+                fs.Seek(0, SeekOrigin.Begin);
+
+                using (var fileContent = new StreamContent(fs))
                 {
                     fileContent.Headers.ContentLength = fs.Length;
                     fileContent.Headers.ContentType = new MediaTypeHeaderValue("b2/x-auto");
@@ -112,15 +115,52 @@ namespace StableCube.Backblaze.DotNetClient
 
                     request.Headers.TryAddWithoutValidation("Authorization", uploadUrl.AuthorizationToken);
 
-                    var result = await _client.SendAsync(request, cancellationToken);
-                    string resultJson = await result.Content.ReadAsStringAsync();
+                    var progressTimer = new System.Timers.Timer();
+                    if(progressData != null)
+                    {
+                        RunSmallUploadProgressMonitor(progressTimer, fs, destinationFilename, progressData);
+                    }
 
-                    if(!result.IsSuccessStatusCode)
-                        ErrorHelper.ThrowException(resultJson);
-                        
-                    return JsonConvert.DeserializeObject<FileData>(resultJson);
+                    using(var result = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+                    {
+                        string resultJson = await result.Content.ReadAsStringAsync();
+                        progressTimer.Enabled = false;
+
+                        if(!result.IsSuccessStatusCode)
+                            ErrorHelper.ThrowException(resultJson);
+                            
+                        return JsonConvert.DeserializeObject<FileData>(resultJson);
+                    };
                 }
             }
+        }
+
+        private void RunSmallUploadProgressMonitor(
+            System.Timers.Timer progressTimer, 
+            Stream partStream,
+            string destinationFilename,
+            IProgress<FileProgress> progressData
+        )
+        {
+            long lastReport = 0;
+            progressTimer.Elapsed += new ElapsedEventHandler((object source, ElapsedEventArgs e) => {
+                if(partStream.Position == partStream.Length)
+                    progressTimer.Enabled = false;
+
+                if(lastReport == partStream.Position)
+                    return;
+
+                progressData?.Report(new FileProgress(
+                    filename: destinationFilename,
+                    totalBytes: partStream.Length,
+                    bytesTransferred: partStream.Position
+                ));
+
+                lastReport = partStream.Position;
+            });
+            
+            progressTimer.Interval = 500;
+            progressTimer.Enabled = true;
         }
 
         /// <summary>
@@ -132,6 +172,7 @@ namespace StableCube.Backblaze.DotNetClient
             string sourcePath, 
             string destinationFilename,
             int retryTimeoutCount = 5,
+            IProgress<FileProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
@@ -143,7 +184,7 @@ namespace StableCube.Backblaze.DotNetClient
             FileData uploadData;
             try
             {
-                uploadData = await UploadSmallFileAsync(uploadUrl, sourcePath, destinationFilename, cancellationToken);
+                uploadData = await UploadSmallFileAsync(uploadUrl, sourcePath, destinationFilename, progressData, cancellationToken);
             }
             catch (B2Exception e)
             {
@@ -260,81 +301,106 @@ namespace StableCube.Backblaze.DotNetClient
 
         public async Task<UploadedPart> UploadLargeFilePartAsync(
             UploadPartUrl uploadUrl, 
-            string sourcePath,
+            Stream partStream,
+            string destinationFilename,
             int partNumber,
-            long maxPartSize,
+            IProgress<FilePartProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
+            if(partStream == null)
+                throw new NullReferenceException("partStream");
+
+            if(!partStream.CanRead)
+                throw new InvalidDataException();
+
+            string fileHash = GetFileHash(partStream);
+            partStream.Seek(0, SeekOrigin.Begin);
             
-
-            using (var fs = File.OpenRead(sourcePath))
+            var progressTimer = new System.Timers.Timer();
+            if(progressData != null)
             {
-                long totalFileSize = fs.Length;
-                int totalFileParts = (int)Math.Ceiling((double)totalFileSize / (double)maxPartSize);
-                if(totalFileParts < 2)
-                    throw new B2LargeFileNotNeededException();
+                RunPartProgressMonitor(progressTimer, partStream, destinationFilename, progressData, partNumber);
+            }
 
-                if(partNumber < 0 || partNumber > totalFileParts)
-                    throw new ArgumentOutOfRangeException($"partNumber: {partNumber.ToString()}");
+            using (var fileContent = new StreamContent(partStream))
+            {
+                fileContent.Headers.ContentLength = partStream.Length;
+                fileContent.Headers.ContentType = new MediaTypeHeaderValue("b2/x-auto");
 
-                long partSize = maxPartSize;
-                if(partNumber == totalFileParts)
-                    partSize = totalFileSize - ((totalFileParts - 1) * maxPartSize);
-
-                int beginOffset = (int)((partNumber - 1) * maxPartSize);
-
-                byte[] filePartData = new byte[partSize];
-                using (BinaryReader reader = new BinaryReader(fs))
+                var request = new HttpRequestMessage
                 {
-                    reader.BaseStream.Seek(beginOffset, SeekOrigin.Begin);
-                    reader.Read(filePartData, 0, (int)partSize);
+                    Method = HttpMethod.Post,
+                    RequestUri = new Uri(uploadUrl.Url),
+                    Headers = {
+                        { "X-Bz-Part-Number", partNumber.ToString() },
+                        { "X-Bz-Content-Sha1", fileHash },
+                    },
+                    Content = fileContent
+                };
 
-                    string fileHash = GetFileHash(filePartData);
+                request.Headers.TryAddWithoutValidation("Authorization", uploadUrl.AuthorizationToken);
 
-                    using (var fileContent = new ByteArrayContent(filePartData))
+                using(var result = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken))
+                {
+                    string resultJson = await result.Content.ReadAsStringAsync();
+                    progressTimer.Enabled = false;
+
+                    if(!result.IsSuccessStatusCode)
                     {
-                        fileContent.Headers.ContentLength = partSize;
-                        fileContent.Headers.ContentType = new MediaTypeHeaderValue("b2/x-auto");
-
-                        var request = new HttpRequestMessage
-                        {
-                            Method = HttpMethod.Post,
-                            RequestUri = new Uri(uploadUrl.Url),
-                            Headers = {
-                                { "X-Bz-Part-Number", partNumber.ToString() },
-                                { "X-Bz-Content-Sha1", fileHash },
-                            },
-                            Content = fileContent
-                        };
-
-                        request.Headers.TryAddWithoutValidation("Authorization", uploadUrl.AuthorizationToken);
-
-                        var result = await _client.SendAsync(request, cancellationToken);
-                        string resultJson = await result.Content.ReadAsStringAsync();
-
-                        if(!result.IsSuccessStatusCode)
-                        {
-                            ErrorHelper.ThrowException(resultJson);
-                        }
-
-                        return JsonConvert.DeserializeObject<UploadedPart>(resultJson);
+                        ErrorHelper.ThrowException(resultJson);
                     }
-                }
+
+                    return JsonConvert.DeserializeObject<UploadedPart>(resultJson);
+                };
             }
         }
 
+        private void RunPartProgressMonitor(
+            System.Timers.Timer progressTimer, 
+            Stream partStream,
+            string destinationFilename,
+            IProgress<FilePartProgress> progressData,
+            int partNumber
+        )
+        {
+            long lastReport = 0;
+            progressTimer.Elapsed += new ElapsedEventHandler((object source, ElapsedEventArgs e) => {
+                if(partStream.Position == partStream.Length)
+                    progressTimer.Enabled = false;
+
+                if(lastReport == partStream.Position)
+                    return;
+
+                progressData?.Report(new FilePartProgress(
+                    filename: destinationFilename,
+                    partNumber: partNumber,
+                    totalBytes: partStream.Length,
+                    bytesTransferred: partStream.Position
+                ));
+
+                lastReport = partStream.Position;
+            });
+            progressTimer.Interval = 500;
+            progressTimer.Enabled = true;
+        }
 
         public async Task<UploadedPart> UploadLargeFilePartAsync(
             Authorization auth,
             FileData fileData,
-            string sourcePath,
+            Stream partStream,
             int partNumber,
-            long maxPartSize,
             int retryTimeoutCount = 5,
+            IProgress<FilePartProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
+            if(partStream == null)
+                throw new NullReferenceException("partStream");
+
+            if(!partStream.CanRead)
+                throw new InvalidDataException();
+            
             int retryCount = 0;
 
             Retry:
@@ -343,7 +409,7 @@ namespace StableCube.Backblaze.DotNetClient
             UploadedPart uploadPart;
             try
             {
-                uploadPart = await UploadLargeFilePartAsync(uploadUrl, sourcePath, partNumber, maxPartSize, cancellationToken);
+                uploadPart = await UploadLargeFilePartAsync(uploadUrl, partStream, fileData.FileName, partNumber, progressData, cancellationToken);
             }
             catch (B2Exception e)
             {
@@ -366,74 +432,31 @@ namespace StableCube.Backblaze.DotNetClient
             return uploadPart;
         }
 
-        /// <summary>
-        /// Probes the file size and automatically does a small or large file upload.
-        /// 
-        /// Retries are attempted on recoverable errors
-        /// </summary>
-        public async Task<FileData> UploadDynamicAsync(
-            Authorization auth,
-            string sourcePath,
-            string bucketId,
-            string destinationFilename,
-            int retryTimeoutCount = 5,
-            CancellationToken cancellationToken = default(CancellationToken)
-        )
-        {
-            long fileSize = new FileInfo(sourcePath).Length;
-
-            if(fileSize > auth.RecommendedPartSize)
-            {
-                int partCount = (int)Math.Ceiling((double)fileSize / (double)auth.RecommendedPartSize);
-                var initData = await StartLargeFileUploadAsync(auth, bucketId, destinationFilename, cancellationToken);
-                string[] partHashes = new string[partCount];
-                Task<UploadedPart>[] partTasks = new Task<UploadedPart>[partCount];
-
-                for (int i = 0; i < partCount; i++)
-                {
-                    partTasks[i] =  UploadLargeFilePartAsync(
-                            auth: auth,
-                            fileData: initData,
-                            sourcePath: sourcePath,
-                            partNumber: i + 1,
-                            maxPartSize: auth.RecommendedPartSize,
-                            retryTimeoutCount: retryTimeoutCount,
-                            cancellationToken: cancellationToken
-                    );
-                }
-
-                UploadedPart[] uploadedParts = await Task.WhenAll(partTasks);
-                for (int i = 0; i < partCount; i++)
-                {
-                    partHashes[i] = uploadedParts[i].ContentSha1;
-                }
-
-                return await FinishLargeFileUploadAsync(auth, initData.FileId, partHashes);
-            }
-            else
-            {
-                return await UploadSmallFileAsync(
-                    auth: auth, 
-                    bucketId: bucketId, 
-                    sourcePath: sourcePath, 
-                    destinationFilename: destinationFilename, 
-                    retryTimeoutCount: retryTimeoutCount, 
-                    cancellationToken: cancellationToken
-                );
-            }
-        }
-
         private string GetFileHash(byte[] fileData)
         {
             using (SHA1 sha1Hash = SHA1.Create())
             {
-                byte[] data = sha1Hash.ComputeHash(fileData);
-                var sBuilder = new StringBuilder();
+                byte[] hash = sha1Hash.ComputeHash(fileData);
 
-                for (int i = 0; i < data.Length; i++)
-                    sBuilder.Append(data[i].ToString("x2"));
-                
-                return sBuilder.ToString();
+                return BitConverter.ToString(hash).Replace("-", String.Empty).ToLower();
+            }
+        }
+
+        private async Task<string> GetFileHashAsync(FileStream fileData, long index, long count)
+        {
+            byte[] buffer = new byte[count];
+            await fileData.ReadAsync(buffer, (int)index, (int)count);
+
+            return GetFileHash(buffer);
+        }
+
+        private string GetFileHash(Stream fileStream)
+        {
+            using (var sha1 = SHA1.Create())
+            {
+                byte[] hash = sha1.ComputeHash(fileStream);
+
+                return BitConverter.ToString(hash).Replace("-", String.Empty).ToLower();
             }
         }
     }

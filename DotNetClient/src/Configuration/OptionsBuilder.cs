@@ -15,6 +15,8 @@ namespace StableCube.Backblaze.DotNetClient
                 clientConfig.DefaultRequestHeaders.Add("Accept", "application/json");
                 clientConfig.DefaultRequestHeaders.Add("User-Agent", "StableCube.BackblazeClient");
             });
+
+            _services.AddScoped<IBackblazeUploader, BackblazeUploader>();
         }
     }
 }

@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -26,6 +28,7 @@ namespace StableCube.Backblaze.DotNetClient
             UploadUrl uploadUrl, 
             string sourcePath, 
             string destinationFilename,
+            IProgress<FileProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
@@ -38,6 +41,7 @@ namespace StableCube.Backblaze.DotNetClient
             string sourcePath, 
             string destinationFilename,
             int retryTimeoutCount = 5,
+            IProgress<FileProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
@@ -63,33 +67,20 @@ namespace StableCube.Backblaze.DotNetClient
 
         Task<UploadedPart> UploadLargeFilePartAsync(
             UploadPartUrl uploadUrl, 
-            string sourcePath,
+            Stream partStream,
+            string destinationFilename,
             int partNumber,
-            long maxPartSize,
+            IProgress<FilePartProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
         Task<UploadedPart> UploadLargeFilePartAsync(
             Authorization auth,
             FileData fileData,
-            string sourcePath,
+            Stream partStream,
             int partNumber,
-            long maxPartSize,
             int retryTimeoutCount = 5,
-            CancellationToken cancellationToken = default(CancellationToken)
-        );
-
-        /// <summary>
-        /// Probes the file size and automatically does a small or large file upload.
-        /// 
-        /// Retries are attempted on recoverable errors
-        /// </summary>
-        Task<FileData> UploadDynamicAsync(
-            Authorization auth,
-            string sourcePath,
-            string bucketId,
-            string destinationFilename,
-            int retryTimeoutCount = 5,
+            IProgress<FilePartProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
     }

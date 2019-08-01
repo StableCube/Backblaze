@@ -12,7 +12,7 @@ namespace StableCube.Backblaze.DotNetClient
         public int PartNumber { get; set; }
 
         [JsonProperty("contentLength")]
-        public string ContentLength { get; set; }
+        public long ContentLength { get; set; }
 
         [JsonProperty("contentSha1")]
         public string ContentSha1 { get; set; }
