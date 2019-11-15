@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -31,10 +32,10 @@ namespace StableCube.Backblaze.DotNetClient
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            Dictionary<string, FileProgress> fileProgress = new Dictionary<string, FileProgress>();
+            ConcurrentDictionary<string, FileProgress> fileProgress = new ConcurrentDictionary<string, FileProgress>();
             long fileSize = new FileInfo(file.sourceFilePath).Length;
-            fileProgress.Add(file.destinationFilename, new FileProgress(filename: file.destinationFilename, totalBytes: fileSize));
-            
+            fileProgress.TryAdd(file.destinationFilename, new FileProgress(filename: file.destinationFilename, totalBytes: fileSize));
+
             Task<FileData> uploadTask;
             if(fileSize > auth.RecommendedPartSize)
             {
@@ -136,7 +137,7 @@ namespace StableCube.Backblaze.DotNetClient
         private async Task<FileData> ProcessLargeUpload(
             Authorization auth,
             UploadFile file,
-            Dictionary<string, FileProgress> fileProgress,
+            IDictionary<string, FileProgress> fileProgress,
             long fileSize,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,
@@ -208,7 +209,7 @@ namespace StableCube.Backblaze.DotNetClient
         private async Task<FileData> ProcessSmallUpload(
             Authorization auth,
             UploadFile file,
-            Dictionary<string, FileProgress> fileProgress,
+            IDictionary<string, FileProgress> fileProgress,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,
             CancellationToken cancellationToken = default(CancellationToken)
