@@ -6,25 +6,33 @@ namespace StableCube.Backblaze.DotNetClient
 {
     public struct TransferProgress
     {
+        private static Object _lock = new Object();
+
         public long TotalBytes 
         { 
             get {
-                long value = 0;
-                foreach (var item in fileProgress)
-                    value += item.Value.totalBytes;
+                lock(_lock)
+                {
+                    long value = 0;
+                    foreach (var item in fileProgress)
+                        value += item.Value.totalBytes;
 
-                return value;
+                    return value;
+                }
             }
         }
 
         public long BytesTransferred 
         { 
             get {
-                long value = 0;
-                foreach (var item in fileProgress)
-                    value += item.Value.bytesTransferred;
+                lock(_lock)
+                {
+                    long value = 0;
+                    foreach (var item in fileProgress)
+                        value += item.Value.bytesTransferred;
 
-                return value;
+                    return value;
+                }
             }
         }
 
