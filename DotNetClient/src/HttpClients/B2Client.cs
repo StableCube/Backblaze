@@ -181,19 +181,17 @@ namespace StableCube.Backblaze.DotNetClient
             Retry:
             var uploadUrl = await GetUploadUrlAsync(auth, bucketId, cancellationToken);
 
-            FileData uploadData;
+            FileData uploadData = null;
             try
             {
                 uploadData = await UploadSmallFileAsync(uploadUrl, sourcePath, destinationFilename, progressData, cancellationToken);
             }
-            catch (B2Exception e)
+            catch (Exception e)
             {
                 if(ErrorHelper.IsRecoverableException(e))
                 {
                     if(retryCount > retryTimeoutCount)
-                    {
                         throw new B2RetryTimeoutException($"Hit retry limit of {retryTimeoutCount}", e);
-                    }
 
                     retryCount++;
                     goto Retry;
@@ -347,9 +345,7 @@ namespace StableCube.Backblaze.DotNetClient
                     progressTimer.Enabled = false;
 
                     if(!result.IsSuccessStatusCode)
-                    {
                         ErrorHelper.ThrowException(resultJson);
-                    }
 
                     return JsonConvert.DeserializeObject<UploadedPart>(resultJson);
                 };
@@ -406,19 +402,17 @@ namespace StableCube.Backblaze.DotNetClient
             Retry:
             var uploadUrl = await GetUploadPartUrlAsync(auth, fileData, cancellationToken);
 
-            UploadedPart uploadPart;
+            UploadedPart uploadPart = null;
             try
             {
                 uploadPart = await UploadLargeFilePartAsync(uploadUrl, partStream, fileData.FileName, partNumber, progressData, cancellationToken);
             }
-            catch (B2Exception e)
+            catch (Exception e)
             {
                 if(ErrorHelper.IsRecoverableException(e))
                 {
                     if(retryCount > retryTimeoutCount)
-                    {
                         throw new B2RetryTimeoutException($"Hit retry limit of {retryTimeoutCount}", e);
-                    }
 
                     retryCount++;
                     goto Retry;

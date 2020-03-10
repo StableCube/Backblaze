@@ -189,7 +189,7 @@ namespace StableCube.Backblaze.DotNetClient
                             fileProgress[progress.filename] = newProgress;
 
                             progressData?.Report(new TransferProgress(
-                                fileProgress: fileProgress
+                                fileProgress: new Dictionary<string, FileProgress>(fileProgress)
                             ));
                         })
                     );
@@ -226,7 +226,7 @@ namespace StableCube.Backblaze.DotNetClient
                     fileProgress[progress.filename] = progress;
 
                     progressData?.Report(new TransferProgress(
-                        fileProgress: fileProgress
+                        fileProgress: new Dictionary<string, FileProgress>(fileProgress)
                     ));
                 })
             );

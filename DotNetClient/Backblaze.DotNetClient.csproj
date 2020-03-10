@@ -4,7 +4,7 @@
     <PackageId>StableCube.Backblaze.DotNetClient</PackageId>
     <TargetFramework>netcoreapp2.2</TargetFramework>
     <Company>Stable Cube</Company>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <Title>StableCube.Backblaze.DotNetClient</Title>
     <Description>DotNet client for the Backblaze B2 API</Description>
     <IsPackable>true</IsPackable>
