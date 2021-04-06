@@ -23,7 +23,7 @@ dotnet pack $1
 echo ""
 echo "Pushing to nuget"
 echo "-------------"
-dotnet nuget push -k $NUGET_KEY $1/bin/local/Debug/*.nupkg
+dotnet nuget push -k $NUGET_ORG_KEY $1/bin/local/Debug/*.nupkg
 
 echo ""
 echo "Clearing nuget cache"

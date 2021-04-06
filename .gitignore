@@ -41,6 +41,7 @@ obj/
 ###################
 /.idea
 .project
+.vscode
 .classpath
 .c9/
 *.launch
