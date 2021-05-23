@@ -1,12 +1,12 @@
 using System;
 using System.Net.Http;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace StableCube.Backblaze.DotNetClient
 {
     public static class ErrorHelper
     {
-        public static B2Exception GetExceptionForError(B2ErrorResponse error)
+        public static B2Exception GetExceptionForError(B2ErrorResponseOutputDTO error)
         {
             switch (error.Status)
             {
@@ -37,11 +37,11 @@ namespace StableCube.Backblaze.DotNetClient
 
         public static void ThrowException(string errorJson)
         {
-            B2ErrorResponse error = JsonConvert.DeserializeObject<B2ErrorResponse>(errorJson);
+            B2ErrorResponseOutputDTO error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(errorJson);
             throw GetExceptionForError(error);
         }
 
-        public static void ThrowException(B2ErrorResponse error)
+        public static void ThrowException(B2ErrorResponseOutputDTO error)
         {
             throw GetExceptionForError(error);
         }
@@ -49,7 +49,7 @@ namespace StableCube.Backblaze.DotNetClient
         /// <summary>
         /// Can an upload potentially be recovered by retrying after supplied error
         /// </summary>
-        public static bool IsRecoverableError(B2ErrorResponse error)
+        public static bool IsRecoverableError(B2ErrorResponseOutputDTO error)
         {
             var exception = GetExceptionForError(error);
             if(exception is B2HashMismatchException)

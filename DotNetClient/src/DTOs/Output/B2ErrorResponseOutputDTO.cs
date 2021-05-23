@@ -1,16 +1,16 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class B2ErrorResponse
+    public class B2ErrorResponseOutputDTO
     {
-        [JsonProperty("code")]
+        [JsonPropertyName("code")]
         public string Code { get; set; }
 
-        [JsonProperty("message")]
+        [JsonPropertyName("message")]
         public string Message { get; set; }
 
-        [JsonProperty("status")]
+        [JsonPropertyName("status")]
         public int Status { get; set; }
 
         public override string ToString()

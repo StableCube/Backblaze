@@ -7,10 +7,15 @@ namespace StableCube.Backblaze.DotNetClient
 {
     public interface IBackblazeUploader
     {
-        IB2Client B2Client { get; }
+        IB2ClientV2 B2Client { get; }
 
-        Task<FileData> UploadDynamicAsync(
-            Authorization auth,
+        /// <summary>
+        /// Probes the file size and automatically does a small or large file upload.
+        /// 
+        /// Retries are attempted on recoverable errors
+        /// </summary>
+        Task<BackblazeApiResponse<FileDataOutputDTO>> UploadDynamicAsync(
+            AuthorizationOutputDTO auth,
             UploadFile file,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,
@@ -20,12 +25,10 @@ namespace StableCube.Backblaze.DotNetClient
         );
 
         /// <summary>
-        /// Probes the file size and automatically does a small or large file upload.
-        /// 
-        /// Retries are attempted on recoverable errors
+        /// A dynamic upload on multiple files
         /// </summary>
-        Task<FileData[]> UploadBatchDynamicAsync(
-            Authorization auth,
+        Task<BackblazeApiResponse<FileDataOutputDTO>[]> UploadDynamicBatchAsync(
+            AuthorizationOutputDTO auth,
             IEnumerable<UploadFile> files,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,

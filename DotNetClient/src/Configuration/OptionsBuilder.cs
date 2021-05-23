@@ -11,7 +11,7 @@ namespace StableCube.Backblaze.DotNetClient
         {
             _services = services;
             
-            _services.AddHttpClient<IB2Client, B2Client>(clientConfig => {
+            _services.AddHttpClient<IB2ClientV2, B2ClientV2>(clientConfig => {
                 clientConfig.DefaultRequestHeaders.Add("Accept", "application/json");
                 clientConfig.DefaultRequestHeaders.Add("User-Agent", "StableCube.BackblazeClient");
             });

@@ -1,35 +1,34 @@
-using System;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class FileData
+    public class FileDataOutputDTO
     {
-        [JsonProperty("accountId")]
+        [JsonPropertyName("accountId")]
         public string AccountId { get; set; }
 
-        [JsonProperty("action")]
+        [JsonPropertyName("action")]
         public string Action { get; set; }
 
-        [JsonProperty("bucketId")]
+        [JsonPropertyName("bucketId")]
         public string BucketId { get; set; }
 
-        [JsonProperty("contentLength")]
+        [JsonPropertyName("contentLength")]
         public ulong ContentLength { get; set; }
 
-        [JsonProperty("contentSha1")]
+        [JsonPropertyName("contentSha1")]
         public string ContentSha1 { get; set; }
 
-        [JsonProperty("contentType")]
+        [JsonPropertyName("contentType")]
         public string ContentType { get; set; }
 
-        [JsonProperty("fileId")]
+        [JsonPropertyName("fileId")]
         public string FileId { get; set; }
 
-        [JsonProperty("fileName")]
+        [JsonPropertyName("fileName")]
         public string FileName { get; set; }
 
-        [JsonProperty("uploadTimestamp")]
+        [JsonPropertyName("uploadTimestamp")]
         public ulong UploadTimestamp { get; set; }
     }
 }

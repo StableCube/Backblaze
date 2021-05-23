@@ -1,17 +1,16 @@
-using System;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class UploadPartUrl
+    public class UploadPartUrlOutputDTO
     {
-        [JsonProperty("fileId")]
+        [JsonPropertyName("fileId")]
         public string FileId { get; set; }
 
-        [JsonProperty("uploadUrl")]
+        [JsonPropertyName("uploadUrl")]
         public string Url { get; set; }
 
-        [JsonProperty("authorizationToken")]
+        [JsonPropertyName("authorizationToken")]
         public string AuthorizationToken { get; set; }
     }
 }

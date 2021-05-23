@@ -12,7 +12,7 @@ namespace StableCube.Backblaze.DotNetClient
         {
         }
 
-        public B2Exception(B2ErrorResponse error) : base(error.ToString())
+        public B2Exception(B2ErrorResponseOutputDTO error) : base(error.ToString())
         {
         }
 

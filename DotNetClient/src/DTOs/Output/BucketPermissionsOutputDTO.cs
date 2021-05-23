@@ -1,20 +1,20 @@
 using System;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class BucketPermissions
+    public class BucketPermissionsOutputDTO
     {
-        [JsonProperty("bucketId")]
+        [JsonPropertyName("bucketId")]
         public string BucketId { get; set; }
 
-        [JsonProperty("bucketName")]
+        [JsonPropertyName("bucketName")]
         public string BucketName { get; set; }
 
-        [JsonProperty("capabilities")]
+        [JsonPropertyName("capabilities")]
         public string[] Capabilities { get; set; }
 
-        [JsonProperty("namePrefix")]
+        [JsonPropertyName("namePrefix")]
         public string NamePrefix { get; set; }
     }
 }

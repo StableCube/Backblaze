@@ -6,17 +6,17 @@ using System.Threading.Tasks;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public interface IB2Client
+    public interface IB2ClientV2
     {
 
-        Task<Authorization> AuthorizeAsync(
+        Task<BackblazeApiResponse<AuthorizationOutputDTO>> AuthorizeAsync(
             string keyId, 
             string applicationKey,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
-        Task<UploadUrl> GetUploadUrlAsync(
-            Authorization auth, 
+        Task<BackblazeApiResponse<UploadUrlOutputDTO>> GetUploadUrlAsync(
+            AuthorizationOutputDTO auth, 
             string bucketId,
             CancellationToken cancellationToken = default(CancellationToken)
         );
@@ -24,8 +24,8 @@ namespace StableCube.Backblaze.DotNetClient
         /// <summary>
         /// Upload a file without any error recovery
         /// </summary>
-        Task<FileData> UploadSmallFileAsync(
-            UploadUrl uploadUrl, 
+        Task<BackblazeApiResponse<FileDataOutputDTO>> UploadSmallFileAsync(
+            UploadUrlOutputDTO uploadUrl, 
             string sourcePath, 
             string destinationFilename,
             IProgress<FileProgress> progressData = null,
@@ -35,8 +35,8 @@ namespace StableCube.Backblaze.DotNetClient
         /// <summary>
         /// Upload a file with attempted recovery from errors
         /// </summary>
-        Task<FileData> UploadSmallFileAsync(
-            Authorization auth,
+        Task<BackblazeApiResponse<FileDataOutputDTO>> UploadSmallFileAsync(
+            AuthorizationOutputDTO auth,
             string bucketId, 
             string sourcePath, 
             string destinationFilename,
@@ -45,38 +45,29 @@ namespace StableCube.Backblaze.DotNetClient
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
-        Task<FileData> StartLargeFileUploadAsync(
-            Authorization auth, 
+        Task<BackblazeApiResponse<FileDataOutputDTO>> StartLargeFileAsync(
+            AuthorizationOutputDTO auth, 
             string bucketId,
             string destinationFilename,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
-        Task<FileData> FinishLargeFileUploadAsync(
-            Authorization auth, 
+        Task<BackblazeApiResponse<FileDataOutputDTO>> FinishLargeFileAsync(
+            AuthorizationOutputDTO auth, 
             string fileId,
             IEnumerable<string> partHashes,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
-        Task<UploadPartUrl> GetUploadPartUrlAsync(
-            Authorization auth,
-            FileData uploadData,
+        Task<BackblazeApiResponse<UploadPartUrlOutputDTO>> GetUploadPartUrlAsync(
+            AuthorizationOutputDTO auth,
+            FileDataOutputDTO uploadData,
             CancellationToken cancellationToken = default(CancellationToken)
         );
 
-        Task<UploadedPart> UploadLargeFilePartAsync(
-            UploadPartUrl uploadUrl, 
-            Stream partStream,
-            string destinationFilename,
-            int partNumber,
-            IProgress<FilePartProgress> progressData = null,
-            CancellationToken cancellationToken = default(CancellationToken)
-        );
-
-        Task<UploadedPart> UploadLargeFilePartAsync(
-            Authorization auth,
-            FileData fileData,
+        Task<BackblazeApiResponse<UploadedPartOutputDTO>> UploadLargeFilePartAsync(
+            AuthorizationOutputDTO auth,
+            FileDataOutputDTO fileData,
             Stream partStream,
             int partNumber,
             int retryTimeoutCount = 5,

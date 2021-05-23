@@ -4,9 +4,14 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);$(MSBuildProjectDirectory)/bin/**/*</DefaultItemExcludes>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(DOTNET_RUNNING_IN_CONTAINER)' == 'true'">
-    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/container/</BaseIntermediateOutputPath>
-    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/container/</BaseOutputPath>
+  <PropertyGroup Condition="'$(DOTNET_RUNNING_IN_CONTAINER)' == 'true' And '$(REMOTE_DEV_MODE)' == '1'">
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/remote/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/remote/</BaseOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(DOTNET_RUNNING_IN_CONTAINER)' == 'true' And '$(REMOTE_DEV_MODE)' != '1'">
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)/obj/sdk/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildProjectDirectory)/bin/sdk/</BaseOutputPath>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(DOTNET_RUNNING_IN_CONTAINER)' != 'true'">

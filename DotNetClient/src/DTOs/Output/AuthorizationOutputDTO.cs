@@ -1,31 +1,31 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class Authorization
+    public class AuthorizationOutputDTO
     {
-        [JsonProperty("accountId")]
+        [JsonPropertyName("accountId")]
         public string AccountId { get; set; }
 
-        [JsonProperty("authorizationToken")]
+        [JsonPropertyName("authorizationToken")]
         public string AuthorizationToken { get; set; }
 
-        [JsonProperty("allowed")]
-        public BucketPermissions Allowed { get; set; }
+        [JsonPropertyName("allowed")]
+        public BucketPermissionsOutputDTO Allowed { get; set; }
 
-        [JsonProperty("apiUrl")]
+        [JsonPropertyName("apiUrl")]
         public string ApiUrl { get; set; }
 
-        [JsonProperty("downloadUrl")]
+        [JsonPropertyName("downloadUrl")]
         public string DownloadUrl { get; set; }
 
-        [JsonProperty("recommendedPartSize")]
+        [JsonPropertyName("recommendedPartSize")]
         public long RecommendedPartSize { get; set; }
 
-        [JsonProperty("absoluteMinimumPartSize")]
+        [JsonPropertyName("absoluteMinimumPartSize")]
         public long AbsoluteMinimumPartSize { get; set; }
 
-        [JsonProperty("minimumPartSize")]
+        [JsonPropertyName("minimumPartSize")]
         public long MinimumPartSize { get; set; }
 
         public bool HasWriteFilePermission()

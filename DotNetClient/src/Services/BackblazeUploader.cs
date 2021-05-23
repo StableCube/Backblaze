@@ -13,17 +13,17 @@ namespace StableCube.Backblaze.DotNetClient
     /// </summary>
     public class BackblazeUploader : IBackblazeUploader
     {
-        public IB2Client B2Client { get; private set; }
+        public IB2ClientV2 B2Client { get; private set; }
 
         public BackblazeUploader(
-            IB2Client client
+            IB2ClientV2 client
         )
         {
             B2Client = client;
         }
 
-        public async Task<FileData> UploadDynamicAsync(
-            Authorization auth,
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> UploadDynamicAsync(
+            AuthorizationOutputDTO auth,
             UploadFile file,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,
@@ -36,10 +36,10 @@ namespace StableCube.Backblaze.DotNetClient
             long fileSize = new FileInfo(file.sourceFilePath).Length;
             fileProgress.TryAdd(file.destinationFilename, new FileProgress(filename: file.destinationFilename, totalBytes: fileSize));
 
-            Task<FileData> uploadTask;
+            Task<BackblazeApiResponse<FileDataOutputDTO>> uploadTask;
             if(fileSize > auth.RecommendedPartSize)
             {
-                uploadTask = ProcessLargeUpload(
+                uploadTask = ProcessLargeUploadAsync(
                     auth: auth, 
                     file: file, 
                     fileProgress: fileProgress,
@@ -51,7 +51,7 @@ namespace StableCube.Backblaze.DotNetClient
             }
             else
             {
-                uploadTask = ProcessSmallUpload(
+                uploadTask = ProcessSmallUploadAsync(
                     auth: auth, 
                     file: file, 
                     fileProgress: fileProgress, 
@@ -64,8 +64,8 @@ namespace StableCube.Backblaze.DotNetClient
             return await uploadTask;
         }
 
-        public async Task<FileData[]> UploadBatchDynamicAsync(
-            Authorization auth,
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>[]> UploadDynamicBatchAsync(
+            AuthorizationOutputDTO auth,
             IEnumerable<UploadFile> files,
             IProgress<TransferProgress> progressData = null,
             int retryTimeoutCount = 5,
@@ -74,8 +74,8 @@ namespace StableCube.Backblaze.DotNetClient
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            FileData[] result = new FileData[files.Count()];
-            Task<FileData>[] uploadTasks = new Task<FileData>[files.Count()];
+            FileDataOutputDTO[] result = new FileDataOutputDTO[files.Count()];
+            Task<BackblazeApiResponse<FileDataOutputDTO>>[] uploadTasks = new Task<BackblazeApiResponse<FileDataOutputDTO>>[files.Count()];
             Dictionary<string, FileProgress> fileProgress = new Dictionary<string, FileProgress>();
 
             foreach (var file in files)
@@ -92,19 +92,19 @@ namespace StableCube.Backblaze.DotNetClient
 
                 if(fileSize > auth.RecommendedPartSize)
                 {
-                    uploadTasks[fileI] = ProcessLargeUpload(
-                        auth: auth, 
-                        file: file, 
+                    uploadTasks[fileI] = ProcessLargeUploadAsync(
+                        auth: auth,
+                        file: file,
                         fileProgress: fileProgress,
                         fileSize: fileSize,
-                        progressData: progressData, 
-                        retryTimeoutCount: retryTimeoutCount, 
+                        progressData: progressData,
+                        retryTimeoutCount: retryTimeoutCount,
                         cancellationToken: cancellationToken
                     );
                 }
                 else
                 {
-                    uploadTasks[fileI] = ProcessSmallUpload(
+                    uploadTasks[fileI] = ProcessSmallUploadAsync(
                         auth: auth, 
                         file: file, 
                         fileProgress: fileProgress, 
@@ -118,7 +118,7 @@ namespace StableCube.Backblaze.DotNetClient
             }
 
             SemaphoreSlim throttler = new SemaphoreSlim(concurrentUploads, concurrentUploads);
-            IEnumerable<Task<FileData>> tasks = uploadTasks.Select(async input =>
+            IEnumerable<Task<BackblazeApiResponse<FileDataOutputDTO>>> tasks = uploadTasks.Select(async input =>
             {
                 await throttler.WaitAsync();
                 try
@@ -134,8 +134,8 @@ namespace StableCube.Backblaze.DotNetClient
             return await Task.WhenAll(tasks);
         }
 
-        private async Task<FileData> ProcessLargeUpload(
-            Authorization auth,
+        private async Task<BackblazeApiResponse<FileDataOutputDTO>> ProcessLargeUploadAsync(
+            AuthorizationOutputDTO auth,
             UploadFile file,
             IDictionary<string, FileProgress> fileProgress,
             long fileSize,
@@ -146,9 +146,18 @@ namespace StableCube.Backblaze.DotNetClient
         )
         {
             int partCount = (int)Math.Ceiling((double)fileSize / (double)auth.RecommendedPartSize);
-            var initData = await B2Client.StartLargeFileUploadAsync(auth, file.bucketId, file.destinationFilename, cancellationToken);
+            var initDataResponse = await B2Client.StartLargeFileAsync(auth, file.bucketId, file.destinationFilename, cancellationToken);
+            if(!initDataResponse.Succeeded)
+            {
+                return new BackblazeApiResponse<FileDataOutputDTO>()
+                {
+                    Succeeded = false,
+                    Error = initDataResponse.Error
+                };
+            }
+            
             string[] partHashes = new string[partCount];
-            List<UploadedPart> completeParts = new List<UploadedPart>();
+            List<UploadedPartOutputDTO> completeParts = new List<UploadedPartOutputDTO>();
 
             for (int i = 0; i < partCount; i++)
             {
@@ -164,9 +173,9 @@ namespace StableCube.Backblaze.DotNetClient
 
                 using (var stream = System.IO.File.OpenRead(tmpFilePath))
                 {
-                    var partResult = await B2Client.UploadLargeFilePartAsync(
+                    var uploadPartResponse = await B2Client.UploadLargeFilePartAsync(
                         auth: auth,
-                        fileData: initData,
+                        fileData: initDataResponse.Data,
                         partStream: stream,
                         partNumber: partNumber,
                         retryTimeoutCount: retryTimeoutCount,
@@ -196,18 +205,25 @@ namespace StableCube.Backblaze.DotNetClient
 
                     stream.Close();
 
-                    completeParts.Add(partResult);
-                    partHashes[i] = partResult.ContentSha1;
+                    if(!uploadPartResponse.Succeeded)
+                    {
+                        throw new B2Exception(uploadPartResponse.Error);
+                    }
+                    else
+                    {
+                        completeParts.Add(uploadPartResponse.Data);
+                        partHashes[i] = uploadPartResponse.Data.ContentSha1;
+                    }
                 }
 
                 File.Delete(tmpFilePath);
             }
 
-            return await B2Client.FinishLargeFileUploadAsync(auth, initData.FileId, partHashes, cancellationToken);
+            return await B2Client.FinishLargeFileAsync(auth, initDataResponse.Data.FileId, partHashes, cancellationToken);
         }
 
-        private async Task<FileData> ProcessSmallUpload(
-            Authorization auth,
+        private async Task<BackblazeApiResponse<FileDataOutputDTO>> ProcessSmallUploadAsync(
+            AuthorizationOutputDTO auth,
             UploadFile file,
             IDictionary<string, FileProgress> fileProgress,
             IProgress<TransferProgress> progressData = null,

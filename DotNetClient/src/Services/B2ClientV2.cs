@@ -6,17 +6,20 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Timers;
-using Newtonsoft.Json;
+using System.Text.Json;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class B2Client : IB2Client
+    public class B2ClientV2 : IB2ClientV2
     {
         protected HttpClient _client;
+        private JsonSerializerOptions _writerOptions  = new JsonSerializerOptions
+        {
+            WriteIndented = true
+        };
 
-        public B2Client(
+        public B2ClientV2(
             HttpClient client
         )
         {
@@ -24,7 +27,7 @@ namespace StableCube.Backblaze.DotNetClient
             _client.Timeout = TimeSpan.FromMinutes(20);
         }
 
-        public async Task<Authorization> AuthorizeAsync(
+        public async Task<BackblazeApiResponse<AuthorizationOutputDTO>> AuthorizeAsync(
             string keyId, 
             string applicationKey,
             CancellationToken cancellationToken = default(CancellationToken)
@@ -36,28 +39,39 @@ namespace StableCube.Backblaze.DotNetClient
             _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", creds);
 
             var result = await _client.GetAsync(endpoint, cancellationToken);
-            result.EnsureSuccessStatusCode();
-
             string resultJson = await result.Content.ReadAsStringAsync();
 
-            return JsonConvert.DeserializeObject<Authorization>(resultJson);
+            if(!result.IsSuccessStatusCode)
+            {
+                return new BackblazeApiResponse<AuthorizationOutputDTO>()
+                {
+                    Succeeded = result.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(resultJson)
+                };
+            }
+
+            return new BackblazeApiResponse<AuthorizationOutputDTO>()
+            {
+                Succeeded = result.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<AuthorizationOutputDTO>(resultJson)
+            };
         }
 
         private StringContent SerializeToJsonContent(object input)
         {
-            return new StringContent(JsonConvert.SerializeObject(input, new JsonSerializerSettings()
-                {
-                    TypeNameHandling = TypeNameHandling.Auto
-                }), Encoding.UTF8, "application/json");
+            return new StringContent(
+                JsonSerializer.Serialize(input, input.GetType(), _writerOptions), 
+                Encoding.UTF8, "application/json"
+            );
         }
 
-        public async Task<UploadUrl> GetUploadUrlAsync(
-            Authorization auth, 
+        public async Task<BackblazeApiResponse<UploadUrlOutputDTO>> GetUploadUrlAsync(
+            AuthorizationOutputDTO auth, 
             string bucketId,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            var body = SerializeToJsonContent(new UploadUrlInput()
+            var body = SerializeToJsonContent(new UploadUrlInputDTO()
             {
                 BucketId = bucketId
             });
@@ -75,16 +89,26 @@ namespace StableCube.Backblaze.DotNetClient
             string responseJson = await response.Content.ReadAsStringAsync();
 
             if(!response.IsSuccessStatusCode)
-                ErrorHelper.ThrowException(responseJson);
+            {
+                return new BackblazeApiResponse<UploadUrlOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
 
-            return JsonConvert.DeserializeObject<UploadUrl>(responseJson);
+            return new BackblazeApiResponse<UploadUrlOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<UploadUrlOutputDTO>(responseJson)
+            };
         }
 
         /// <summary>
         /// Upload a file without any error recovery
         /// </summary>
-        public async Task<FileData> UploadSmallFileAsync(
-            UploadUrl uploadUrl, 
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> UploadSmallFileAsync(
+            UploadUrlOutputDTO uploadUrl, 
             string sourcePath, 
             string destinationFilename,
             IProgress<FileProgress> progressData = null,
@@ -93,7 +117,7 @@ namespace StableCube.Backblaze.DotNetClient
         {
             using (var fs = File.OpenRead(sourcePath))
             {
-                string fileHash = GetFileHash(fs);
+                string fileHash = FileHasher.GetFileHash(fs);
 
                 fs.Seek(0, SeekOrigin.Begin);
 
@@ -127,9 +151,19 @@ namespace StableCube.Backblaze.DotNetClient
                         progressTimer.Enabled = false;
 
                         if(!result.IsSuccessStatusCode)
-                            ErrorHelper.ThrowException(resultJson);
-                            
-                        return JsonConvert.DeserializeObject<FileData>(resultJson);
+                        {
+                            return new BackblazeApiResponse<FileDataOutputDTO>()
+                            {
+                                Succeeded = result.IsSuccessStatusCode,
+                                Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(resultJson)
+                            };
+                        }
+
+                        return new BackblazeApiResponse<FileDataOutputDTO>()
+                        {
+                            Succeeded = result.IsSuccessStatusCode,
+                            Data = JsonSerializer.Deserialize<FileDataOutputDTO>(resultJson)
+                        };
                     };
                 }
             }
@@ -166,8 +200,8 @@ namespace StableCube.Backblaze.DotNetClient
         /// <summary>
         /// Upload a file with attempted recovery from errors
         /// </summary>
-        public async Task<FileData> UploadSmallFileAsync(
-            Authorization auth,
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> UploadSmallFileAsync(
+            AuthorizationOutputDTO auth,
             string bucketId, 
             string sourcePath, 
             string destinationFilename,
@@ -179,40 +213,65 @@ namespace StableCube.Backblaze.DotNetClient
             int retryCount = 0;
 
             Retry:
-            var uploadUrl = await GetUploadUrlAsync(auth, bucketId, cancellationToken);
-
-            FileData uploadData = null;
-            try
+            var uploadUrlResponse = await GetUploadUrlAsync(auth, bucketId, cancellationToken);
+            if(!uploadUrlResponse.Succeeded)
             {
-                uploadData = await UploadSmallFileAsync(uploadUrl, sourcePath, destinationFilename, progressData, cancellationToken);
+                return new BackblazeApiResponse<FileDataOutputDTO>()
+                {
+                    Succeeded = uploadUrlResponse.Succeeded,
+                    Error = uploadUrlResponse.Error
+                };
             }
-            catch (Exception e)
+
+            FileDataOutputDTO uploadData = null;
+            var uploadDataResponse = await UploadSmallFileAsync(uploadUrlResponse.Data, sourcePath, destinationFilename, progressData, cancellationToken);
+            if(uploadDataResponse.Succeeded)
             {
-                if(ErrorHelper.IsRecoverableException(e))
+                uploadData = uploadDataResponse.Data;
+            }
+            else
+            {
+                if(ErrorHelper.IsRecoverableError(uploadDataResponse.Error))
                 {
                     if(retryCount > retryTimeoutCount)
-                        throw new B2RetryTimeoutException($"Hit retry limit of {retryTimeoutCount}", e);
+                    {
+                        uploadDataResponse.Error.Message = $"Hit retry max on error: {uploadDataResponse.Error.Message}";
+
+                        return new BackblazeApiResponse<FileDataOutputDTO>()
+                        {
+                            Succeeded = false,
+                            Error = uploadDataResponse.Error
+                        };
+                    }
 
                     retryCount++;
                     goto Retry;
                 }
                 else
                 {
-                    throw e;
+                    return new BackblazeApiResponse<FileDataOutputDTO>()
+                    {
+                        Succeeded = false,
+                        Error = uploadDataResponse.Error
+                    };
                 }
             }
 
-            return uploadData;
+            return new BackblazeApiResponse<FileDataOutputDTO>()
+            {
+                Succeeded = uploadDataResponse.Succeeded,
+                Data = uploadData
+            };
         }
 
-        public async Task<FileData> StartLargeFileUploadAsync(
-            Authorization auth, 
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> StartLargeFileAsync(
+            AuthorizationOutputDTO auth, 
             string bucketId,
             string destinationFilename,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            var body = SerializeToJsonContent(new StartLargeFileUploadInput()
+            var body = SerializeToJsonContent(new StartLargeFileUploadInputDTO()
             {
                 BucketId = bucketId,
                 FileName = destinationFilename,
@@ -232,19 +291,29 @@ namespace StableCube.Backblaze.DotNetClient
             string responseJson = await response.Content.ReadAsStringAsync();
 
             if(!response.IsSuccessStatusCode)
-                ErrorHelper.ThrowException(responseJson);
+            {
+                return new BackblazeApiResponse<FileDataOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
 
-            return JsonConvert.DeserializeObject<FileData>(responseJson);
+            return new BackblazeApiResponse<FileDataOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<FileDataOutputDTO>(responseJson)
+            };
         }
 
-        public async Task<FileData> FinishLargeFileUploadAsync(
-            Authorization auth, 
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> FinishLargeFileAsync(
+            AuthorizationOutputDTO auth, 
             string fileId,
             IEnumerable<string> partHashes,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            var body = SerializeToJsonContent(new FinishLargeFileUploadInput()
+            var body = SerializeToJsonContent(new FinishLargeFileUploadInputDTO()
             {
                 FileId = fileId,
                 PartSha1Array = (string[])partHashes
@@ -263,18 +332,28 @@ namespace StableCube.Backblaze.DotNetClient
             string responseJson = await response.Content.ReadAsStringAsync();
 
             if(!response.IsSuccessStatusCode)
-                ErrorHelper.ThrowException(responseJson);
+            {
+                return new BackblazeApiResponse<FileDataOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
 
-            return JsonConvert.DeserializeObject<FileData>(responseJson);
+            return new BackblazeApiResponse<FileDataOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<FileDataOutputDTO>(responseJson)
+            };
         }
 
-        public async Task<UploadPartUrl> GetUploadPartUrlAsync(
-            Authorization auth,
-            FileData uploadData,
+        public async Task<BackblazeApiResponse<UploadPartUrlOutputDTO>> GetUploadPartUrlAsync(
+            AuthorizationOutputDTO auth,
+            FileDataOutputDTO uploadData,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
-            var body = SerializeToJsonContent(new UploadPartUrlInput()
+            var body = SerializeToJsonContent(new UploadPartUrlInputDTO()
             {
                 FileId = uploadData.FileId
             });
@@ -292,13 +371,23 @@ namespace StableCube.Backblaze.DotNetClient
             string responseJson = await response.Content.ReadAsStringAsync();
 
             if(!response.IsSuccessStatusCode)
-                ErrorHelper.ThrowException(responseJson);
+            {
+                return new BackblazeApiResponse<UploadPartUrlOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
 
-            return JsonConvert.DeserializeObject<UploadPartUrl>(responseJson);
+            return new BackblazeApiResponse<UploadPartUrlOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<UploadPartUrlOutputDTO>(responseJson)
+            };
         }
 
-        public async Task<UploadedPart> UploadLargeFilePartAsync(
-            UploadPartUrl uploadUrl, 
+        private async Task<BackblazeApiResponse<UploadedPartOutputDTO>> UploadLargeFilePartAsync(
+            UploadPartUrlOutputDTO uploadUrl, 
             Stream partStream,
             string destinationFilename,
             int partNumber,
@@ -312,7 +401,7 @@ namespace StableCube.Backblaze.DotNetClient
             if(!partStream.CanRead)
                 throw new InvalidDataException();
 
-            string fileHash = GetFileHash(partStream);
+            string fileHash = FileHasher.GetFileHash(partStream);
             partStream.Seek(0, SeekOrigin.Begin);
             
             var progressTimer = new System.Timers.Timer();
@@ -345,9 +434,19 @@ namespace StableCube.Backblaze.DotNetClient
                     progressTimer.Enabled = false;
 
                     if(!result.IsSuccessStatusCode)
-                        ErrorHelper.ThrowException(resultJson);
+                    {
+                        return new BackblazeApiResponse<UploadedPartOutputDTO>()
+                        {
+                            Succeeded = result.IsSuccessStatusCode,
+                            Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(resultJson)
+                        };
+                    }
 
-                    return JsonConvert.DeserializeObject<UploadedPart>(resultJson);
+                    return new BackblazeApiResponse<UploadedPartOutputDTO>()
+                    {
+                        Succeeded = result.IsSuccessStatusCode,
+                        Data = JsonSerializer.Deserialize<UploadedPartOutputDTO>(resultJson)
+                    };
                 };
             }
         }
@@ -381,9 +480,9 @@ namespace StableCube.Backblaze.DotNetClient
             progressTimer.Enabled = true;
         }
 
-        public async Task<UploadedPart> UploadLargeFilePartAsync(
-            Authorization auth,
-            FileData fileData,
+        public async Task<BackblazeApiResponse<UploadedPartOutputDTO>> UploadLargeFilePartAsync(
+            AuthorizationOutputDTO auth,
+            FileDataOutputDTO fileData,
             Stream partStream,
             int partNumber,
             int retryTimeoutCount = 5,
@@ -400,58 +499,98 @@ namespace StableCube.Backblaze.DotNetClient
             int retryCount = 0;
 
             Retry:
-            var uploadUrl = await GetUploadPartUrlAsync(auth, fileData, cancellationToken);
-
-            UploadedPart uploadPart = null;
-            try
+            var uploadUrlResponse = await GetUploadPartUrlAsync(auth, fileData, cancellationToken);
+            if(!uploadUrlResponse.Succeeded)
             {
-                uploadPart = await UploadLargeFilePartAsync(uploadUrl, partStream, fileData.FileName, partNumber, progressData, cancellationToken);
+                return new BackblazeApiResponse<UploadedPartOutputDTO>()
+                {
+                    Succeeded = uploadUrlResponse.Succeeded,
+                    Error = uploadUrlResponse.Error
+                };
             }
-            catch (Exception e)
+
+            UploadedPartOutputDTO uploadPart = null;
+            var uploadPartResponse = await UploadLargeFilePartAsync(uploadUrlResponse.Data, partStream, fileData.FileName, partNumber, progressData, cancellationToken);
+            if(uploadPartResponse.Succeeded)
             {
-                if(ErrorHelper.IsRecoverableException(e))
+                uploadPart = uploadPartResponse.Data;
+            }
+            else
+            {
+                if(ErrorHelper.IsRecoverableError(uploadPartResponse.Error))
                 {
                     if(retryCount > retryTimeoutCount)
-                        throw new B2RetryTimeoutException($"Hit retry limit of {retryTimeoutCount}", e);
+                    {
+                        uploadPartResponse.Error.Message = $"Hit retry max on error: {uploadPartResponse.Error.Message}";
+
+                        return new BackblazeApiResponse<UploadedPartOutputDTO>()
+                        {
+                            Succeeded = false,
+                            Error = uploadPartResponse.Error
+                        };
+                    }
 
                     retryCount++;
                     goto Retry;
                 }
                 else
                 {
-                    throw e;
+                    return new BackblazeApiResponse<UploadedPartOutputDTO>()
+                    {
+                        Succeeded = false,
+                        Error = uploadPartResponse.Error
+                    };
                 }
             }
 
-            return uploadPart;
-        }
-
-        private string GetFileHash(byte[] fileData)
-        {
-            using (SHA1 sha1Hash = SHA1.Create())
+            return new BackblazeApiResponse<UploadedPartOutputDTO>()
             {
-                byte[] hash = sha1Hash.ComputeHash(fileData);
-
-                return BitConverter.ToString(hash).Replace("-", String.Empty).ToLower();
-            }
+                Succeeded = uploadUrlResponse.Succeeded,
+                Data = uploadPart
+            };
         }
 
-        private async Task<string> GetFileHashAsync(FileStream fileData, long index, long count)
+        public async Task<BackblazeApiResponse<FileVersionDeletedOutputDTO>> DeleteFileVersionAsync(
+            AuthorizationOutputDTO auth,
+            string fileName,
+            string fileId,
+            bool bypassGovernance,
+            CancellationToken cancellationToken = default(CancellationToken)
+        )
         {
-            byte[] buffer = new byte[count];
-            await fileData.ReadAsync(buffer, (int)index, (int)count);
-
-            return GetFileHash(buffer);
-        }
-
-        private string GetFileHash(Stream fileStream)
-        {
-            using (var sha1 = SHA1.Create())
+            var body = SerializeToJsonContent(new DeleteFileVersionInputDTO()
             {
-                byte[] hash = sha1.ComputeHash(fileStream);
+                FileName = fileName,
+                FileId = fileId,
+                BypassGovernance = bypassGovernance,
+            });
 
-                return BitConverter.ToString(hash).Replace("-", String.Empty).ToLower();
+            var request = new HttpRequestMessage
+            {
+                Method = HttpMethod.Post,
+                RequestUri = new Uri($"{auth.ApiUrl}/b2api/v2/b2_delete_file_version"),
+                Content = body
+            };
+
+            request.Headers.TryAddWithoutValidation("Authorization", auth.AuthorizationToken);
+
+            var response = await _client.SendAsync(request, cancellationToken);
+            string responseJson = await response.Content.ReadAsStringAsync();
+
+            if(!response.IsSuccessStatusCode)
+            {
+                return new BackblazeApiResponse<FileVersionDeletedOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
             }
+
+            return new BackblazeApiResponse<FileVersionDeletedOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<FileVersionDeletedOutputDTO>(responseJson)
+            };
         }
     }
 }

@@ -1,17 +1,16 @@
-using System;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace StableCube.Backblaze.DotNetClient
 {
-    public class StartLargeFileUploadInput
+    public class StartLargeFileUploadInputDTO
     {
-        [JsonProperty("bucketId")]
+        [JsonPropertyName("bucketId")]
         public string BucketId { get; set; }
 
-        [JsonProperty("fileName")]
+        [JsonPropertyName("fileName")]
         public string FileName { get; set; }
 
-        [JsonProperty("contentType")]
+        [JsonPropertyName("contentType")]
         public string ContentType { get; set; }
     }
 }
