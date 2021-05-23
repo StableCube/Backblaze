@@ -74,5 +74,24 @@ namespace StableCube.Backblaze.DotNetClient
             IProgress<FilePartProgress> progressData = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
+
+        Task<BackblazeApiResponse<FileVersionDeletedOutputDTO>> DeleteFileVersionAsync(
+            AuthorizationOutputDTO auth,
+            string fileName,
+            string fileId,
+            bool? bypassGovernance = null,
+            CancellationToken cancellationToken = default(CancellationToken)
+        );
+
+        Task<BackblazeApiResponse<ListFileVersionsOutputDTO>> ListFileVersionsAsync(
+            AuthorizationOutputDTO auth,
+            string bucketId,
+            string startFileName = null,
+            string startFileId = null,
+            int? maxFileCount = null,
+            string prefix = null,
+            string delimiter = null,
+            CancellationToken cancellationToken = default(CancellationToken)
+        );
     }
 }

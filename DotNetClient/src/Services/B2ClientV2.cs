@@ -554,7 +554,7 @@ namespace StableCube.Backblaze.DotNetClient
             AuthorizationOutputDTO auth,
             string fileName,
             string fileId,
-            bool bypassGovernance,
+            bool? bypassGovernance = null,
             CancellationToken cancellationToken = default(CancellationToken)
         )
         {
@@ -590,6 +590,55 @@ namespace StableCube.Backblaze.DotNetClient
             {
                 Succeeded = response.IsSuccessStatusCode,
                 Data = JsonSerializer.Deserialize<FileVersionDeletedOutputDTO>(responseJson)
+            };
+        }
+
+        public async Task<BackblazeApiResponse<ListFileVersionsOutputDTO>> ListFileVersionsAsync(
+            AuthorizationOutputDTO auth,
+            string bucketId,
+            string startFileName = null,
+            string startFileId = null,
+            int? maxFileCount = null,
+            string prefix = null,
+            string delimiter = null,
+            CancellationToken cancellationToken = default(CancellationToken)
+        )
+        {
+            var body = SerializeToJsonContent(new ListFileVersionsInputDTO()
+            {
+                BucketId = bucketId,
+                StartFileName = startFileName,
+                StartFileId = startFileId,
+                MaxFileCount = maxFileCount,
+                Prefix = prefix,
+                Delimiter = delimiter,
+            });
+
+            var request = new HttpRequestMessage
+            {
+                Method = HttpMethod.Post,
+                RequestUri = new Uri($"{auth.ApiUrl}/b2api/v2/b2_list_file_versions"),
+                Content = body
+            };
+
+            request.Headers.TryAddWithoutValidation("Authorization", auth.AuthorizationToken);
+
+            var response = await _client.SendAsync(request, cancellationToken);
+            string responseJson = await response.Content.ReadAsStringAsync();
+
+            if(!response.IsSuccessStatusCode)
+            {
+                return new BackblazeApiResponse<ListFileVersionsOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
+
+            return new BackblazeApiResponse<ListFileVersionsOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<ListFileVersionsOutputDTO>(responseJson)
             };
         }
     }

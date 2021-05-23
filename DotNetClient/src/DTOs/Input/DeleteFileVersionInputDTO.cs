@@ -11,6 +11,6 @@ namespace StableCube.Backblaze.DotNetClient
         public string FileId { get; set; }
 
         [JsonPropertyName("bypassGovernance")]
-        public bool BypassGovernance { get; set; }
+        public bool? BypassGovernance { get; set; }
     }
 }
