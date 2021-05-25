@@ -8,7 +8,7 @@ set -e
 echo ""
 echo "Deleteing old nupkg files"
 echo "-------------"
-rm -f $1/bin/local/Debug/*.nupkg
+rm -f $1/bin/local/Release/*.nupkg
 
 echo ""
 echo "Cleaning old packages"
@@ -18,12 +18,12 @@ dotnet clean $1
 echo ""
 echo "Packing"
 echo "-------------"
-dotnet pack $1
+dotnet pack -c Release $1
 
 echo ""
 echo "Pushing to nuget"
 echo "-------------"
-dotnet nuget push -k $NUGET_ORG_KEY $1/bin/local/Debug/*.nupkg
+dotnet nuget push -k $NUGET_ORG_KEY $1/bin/local/Release/*.nupkg
 
 echo ""
 echo "Clearing nuget cache"
