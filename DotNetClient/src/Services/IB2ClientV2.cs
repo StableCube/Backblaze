@@ -93,5 +93,11 @@ namespace StableCube.Backblaze.DotNetClient
             string delimiter = null,
             CancellationToken cancellationToken = default(CancellationToken)
         );
+
+        Task<BackblazeApiResponse<FileDataOutputDTO>> CopyFileAsync(
+            AuthorizationOutputDTO auth,
+            CopyFileInputDTO input,
+            CancellationToken cancellationToken = default(CancellationToken)
+        );
     }
 }

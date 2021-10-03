@@ -641,5 +641,41 @@ namespace StableCube.Backblaze.DotNetClient
                 Data = JsonSerializer.Deserialize<ListFileVersionsOutputDTO>(responseJson)
             };
         }
+
+        public async Task<BackblazeApiResponse<FileDataOutputDTO>> CopyFileAsync(
+            AuthorizationOutputDTO auth,
+            CopyFileInputDTO input,
+            CancellationToken cancellationToken = default(CancellationToken)
+        )
+        {
+            var body = SerializeToJsonContent(input);
+
+            var request = new HttpRequestMessage
+            {
+                Method = HttpMethod.Post,
+                RequestUri = new Uri($"{auth.ApiUrl}/b2api/v2/b2_copy_file"),
+                Content = body
+            };
+
+            request.Headers.TryAddWithoutValidation("Authorization", auth.AuthorizationToken);
+
+            var response = await _client.SendAsync(request, cancellationToken);
+            string responseJson = await response.Content.ReadAsStringAsync();
+
+            if(!response.IsSuccessStatusCode)
+            {
+                return new BackblazeApiResponse<FileDataOutputDTO>()
+                {
+                    Succeeded = response.IsSuccessStatusCode,
+                    Error = JsonSerializer.Deserialize<B2ErrorResponseOutputDTO>(responseJson)
+                };
+            }
+
+            return new BackblazeApiResponse<FileDataOutputDTO>()
+            {
+                Succeeded = response.IsSuccessStatusCode,
+                Data = JsonSerializer.Deserialize<FileDataOutputDTO>(responseJson)
+            };
+        }
     }
 }
