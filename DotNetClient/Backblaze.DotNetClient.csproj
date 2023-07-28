@@ -4,19 +4,19 @@
     <PackageId>StableCube.Backblaze.DotNetClient</PackageId>
     <TargetFramework>netstandard2.0</TargetFramework>
     <Company>Stable Cube</Company>
-    <Version>2.0.2</Version>
+    <Version>2.0.3</Version>
     <Title>StableCube.Backblaze.DotNetClient</Title>
     <Description>DotNet client for the Backblaze B2 API</Description>
     <IsPackable>true</IsPackable>
     <LicenseUrl>https://opensource.org/licenses/MIT</LicenseUrl>
     <RepositoryUrl>https://github.com/StableCube/Backblaze</RepositoryUrl>
-    <Copyright>Copyright 2021</Copyright>
+    <Copyright>Copyright 2023</Copyright>
     <Authors>Zachary Boyet</Authors>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="5.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="5.0.0" />
-    <PackageReference Include="System.Text.Json" Version="5.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="7.0.0" />
+    <PackageReference Include="System.Text.Json" Version="7.0.3" />
   </ItemGroup>
 </Project>
