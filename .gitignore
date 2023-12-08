@@ -48,6 +48,7 @@ obj/
 .settings/
 .vscode/
 *.sublime-workspace
+*.sln
 ############
 # Packages #
 ############
